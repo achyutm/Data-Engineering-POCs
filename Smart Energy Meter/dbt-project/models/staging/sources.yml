@@ -1,0 +1,34 @@
+version: 2
+
+sources:
+  - name: kafka
+    database: kafka
+    schema: default
+    tables:
+      - name: telemetry_raw
+        description: "Raw telemetry data from smart energy meters streaming through Kafka"
+        columns:
+          - name: device_id
+            description: "Unique identifier for the smart meter device"
+          - name: customer_id
+            description: "Customer ID associated with the device"
+          - name: timestamp
+            description: "ISO 8601 timestamp of the reading"
+          - name: metrics_energy_kwh
+            description: "Energy consumption in kWh"
+          - name: metrics_voltage
+            description: "Voltage reading"
+          - name: metrics_battery_pct
+            description: "Battery percentage"
+          - name: status
+            description: "Device status (OK or WARNING)"
+
+      - name: meter_logs
+        description: "Unstructured health monitoring logs from smart energy meters"
+        columns:
+          - name: _message
+            description: "Raw unstructured log message (plain text)"
+          - name: _timestamp
+            description: "Kafka message timestamp"
+          - name: _key
+            description: "Kafka message key (device_id)"

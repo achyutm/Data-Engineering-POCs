@@ -1,0 +1,190 @@
+version: '3.8'
+
+services:
+  kafka:
+    image: confluentinc/cp-kafka:7.6.0
+    container_name: kafka-kraft
+    hostname: kafka
+    ports:
+      - "19092:19092"
+      - "9093:9093"
+    environment:
+      # KRaft mode configuration
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: 'broker,controller'
+      KAFKA_CONTROLLER_QUORUM_VOTERS: '1@kafka:9093'
+      KAFKA_CONTROLLER_LISTENER_NAMES: 'CONTROLLER'
+
+      # Listener configuration
+      KAFKA_LISTENERS: 'PLAINTEXT://0.0.0.0:9092,PLAINTEXT_HOST://0.0.0.0:19092,CONTROLLER://0.0.0.0:9093'
+      KAFKA_ADVERTISED_LISTENERS: 'PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:19092'
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: 'CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT'
+      KAFKA_INTER_BROKER_LISTENER_NAME: 'PLAINTEXT'
+
+      # Cluster ID (generate new one with: kafka-storage random-uuid)
+      CLUSTER_ID: 'MkU3OEVBNTcwNTJENDM2Qk'
+
+      # Log configuration
+      KAFKA_LOG_DIRS: '/var/lib/kafka/data'
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+
+      # Performance tuning
+      KAFKA_NUM_NETWORK_THREADS: 3
+      KAFKA_NUM_IO_THREADS: 8
+      KAFKA_SOCKET_SEND_BUFFER_BYTES: 102400
+      KAFKA_SOCKET_RECEIVE_BUFFER_BYTES: 102400
+      KAFKA_SOCKET_REQUEST_MAX_BYTES: 104857600
+
+      # Log retention
+      KAFKA_LOG_RETENTION_HOURS: 168
+      KAFKA_LOG_SEGMENT_BYTES: 1073741824
+      KAFKA_LOG_RETENTION_CHECK_INTERVAL_MS: 300000
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    networks:
+      - smartenergymeter-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-broker-api-versions --bootstrap-server localhost:9092 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: kafka-ui
+    ports:
+      - "8080:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local-kraft
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+      DYNAMIC_CONFIG_ENABLED: 'true'
+    depends_on:
+      kafka:
+        condition: service_healthy
+    networks:
+      - smartenergymeter-network
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16
+    container_name: postgres-smart-energy-meter
+    hostname: postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: smartenergymeter
+      POSTGRES_PASSWORD: smartenergymeter123
+      POSTGRES_DB: smart_energy_meter_db
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - smartenergymeter-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U smartenergymeter -d smart_energy_meter_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  minio:
+    image: minio/minio:latest
+    container_name: minio-storage
+    hostname: minio
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: minio
+      MINIO_ROOT_PASSWORD: minio123
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio-data:/data
+    networks:
+      - smartenergymeter-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+      start_period: 30s
+
+  minio-init:
+    image: minio/mc:latest
+    container_name: minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    networks:
+      - smartenergymeter-network
+    entrypoint: >
+      /bin/sh -c "
+      /usr/bin/mc alias set minio http://minio:9000 minio minio123;
+      /usr/bin/mc mb minio/lakehouse --ignore-existing;
+      /usr/bin/mc mb minio/telemetry --ignore-existing;
+      /usr/bin/mc anonymous set download minio/lakehouse;
+      /usr/bin/mc anonymous set download minio/telemetry;
+      exit 0;
+      "
+
+  trino:
+    image: trinodb/trino:latest
+    container_name: trino-coordinator
+    hostname: trino
+    ports:
+      - "8081:8080"
+    volumes:
+      - ./trino-config/catalog:/etc/trino/catalog
+      - ./trino-config/kafka-tables:/etc/trino/kafka-tables
+    networks:
+      - smartenergymeter-network
+    restart: unless-stopped
+    depends_on:
+      minio:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/v1/info || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  dbt:
+    build:
+      context: ./dbt-project
+      dockerfile: Dockerfile
+    container_name: dbt-transformations
+    hostname: dbt
+    volumes:
+      - ./dbt-project:/dbt
+    networks:
+      - smartenergymeter-network
+    depends_on:
+      trino:
+        condition: service_healthy
+    environment:
+      DBT_PROFILES_DIR: /dbt
+      DBT_AUTO_RUN: "true"            # Automatic periodic runs enabled
+      DBT_RUN_INTERVAL: "600"         # Run interval in seconds (default: 600 = 10 minutes)
+    restart: unless-stopped
+
+volumes:
+  kafka-data:
+    driver: local
+  postgres-data:
+    driver: local
+  minio-data:
+    driver: local
+
+networks:
+  smartenergymeter-network:
+    driver: bridge

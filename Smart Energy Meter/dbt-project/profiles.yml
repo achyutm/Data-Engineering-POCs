@@ -1,0 +1,13 @@
+smart_energy_meter:
+  target: dev
+  outputs:
+    dev:
+      type: trino
+      method: none
+      user: trino
+      host: trino
+      port: 8080
+      database: iceberg
+      schema: energy_data
+      threads: 4
+      http_scheme: http

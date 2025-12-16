@@ -1,0 +1,27 @@
+{
+  "tableName": "telemetry_raw",
+  "schemaName": "default",
+  "topicName": "default.telemetry_raw",
+  "key": {
+    "dataFormat": "raw",
+    "fields": [
+      {
+        "name": "_key",
+        "dataFormat": "BYTE",
+        "type": "VARCHAR",
+        "hidden": "false"
+      }
+    ]
+  },
+  "message": {
+    "dataFormat": "raw",
+    "fields": [
+      {
+        "name": "_message",
+        "type": "VARCHAR",
+        "dataFormat": "BYTE",
+        "hidden": "false"
+      }
+    ]
+  }
+}

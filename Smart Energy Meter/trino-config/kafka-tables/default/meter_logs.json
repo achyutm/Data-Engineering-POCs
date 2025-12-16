@@ -1,0 +1,27 @@
+{
+  "tableName": "meter_logs",
+  "schemaName": "default",
+  "topicName": "default.meter_logs",
+  "key": {
+    "dataFormat": "raw",
+    "fields": [
+      {
+        "name": "_key",
+        "dataFormat": "BYTE",
+        "type": "VARCHAR",
+        "hidden": "false"
+      }
+    ]
+  },
+  "message": {
+    "dataFormat": "raw",
+    "fields": [
+      {
+        "name": "_message",
+        "type": "VARCHAR",
+        "dataFormat": "BYTE",
+        "hidden": "false"
+      }
+    ]
+  }
+}
