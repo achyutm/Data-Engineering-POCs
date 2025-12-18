@@ -1,0 +1,3 @@
+dbt-project/dbt_packages/
+dbt-project/logs
+dbt-project/target
