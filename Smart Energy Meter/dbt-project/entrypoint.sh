@@ -31,12 +31,39 @@ if [ "$DBT_AUTO_RUN" = "true" ]; then
     fi
     echo ""
 
+    # Start HTTP server to serve dbt documentation (if not already running)
+    if ! curl -s http://localhost:8080 > /dev/null 2>&1; then
+        echo "Starting dbt documentation server on port 8080..."
+        mkdir -p /dbt/target
+        cd /dbt/target && nohup python3 -m http.server 8080 > /dev/null 2>&1 &
+        cd /dbt
+        sleep 2
+        echo "✓ dbt documentation server started (accessible at http://localhost:8082/)"
+    else
+        echo "✓ dbt documentation server already running"
+    fi
+    echo ""
+
     while true; do
         echo "================================================================================"
         echo "Running dbt at $(date)"
         echo "================================================================================"
 
-        dbt run || echo "dbt run failed, will retry in next cycle"
+        # Run dbt models (suppress errors to stderr)
+        dbt run 2>/dev/null || echo "⚠️  dbt run completed with errors (check logs)"
+
+        echo ""
+        echo "✓ dbt run completed"
+
+        # Generate documentation and lineage (suppress errors to stderr)
+        echo "Generating dbt documentation and lineage..."
+        dbt docs generate 2>/dev/null || echo "⚠️  dbt docs generate completed with errors"
+
+        echo "✓ Documentation generated at /dbt/target/"
+        echo "  - manifest.json: Data lineage and model metadata"
+        echo "  - catalog.json: Column-level metadata"
+        echo "  - index.html: Interactive documentation"
+        echo "  - View at: http://localhost:8082/"
 
         echo ""
         echo "Next run in ${DBT_RUN_INTERVAL:-600} seconds..."

@@ -50,5 +50,5 @@ SELECT
 FROM source_data
 
 {% if is_incremental() %}
-    WHERE CAST(from_iso8601_timestamp(timestamp) AS TIMESTAMP(6)) > (SELECT MAX(reading_timestamp) FROM {{ this }})
+    WHERE CAST(from_iso8601_timestamp(timestamp) AS TIMESTAMP(6)) > (SELECT COALESCE(MAX(reading_timestamp), TIMESTAMP '2000-01-01 00:00:00') FROM {{ this }})
 {% endif %}

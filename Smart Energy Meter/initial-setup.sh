@@ -19,9 +19,7 @@ echo ""
 
 # Step 2: Build and start all services
 echo "Step 2: Building and starting all services..."
-docker-compose build
-echo "  → Starting all services..."
-docker-compose up -d
+docker-compose up -d --build
 echo "✓ Services started"
 echo ""
 
@@ -146,7 +144,9 @@ echo "  - PostgreSQL:      localhost:5432"
 echo "  - MinIO Console:   http://localhost:9001 (minio/minio123)"
 echo "  - MinIO S3 API:    http://localhost:9000"
 echo "  - Trino:           http://localhost:8081"
+echo "  - Superset:        http://localhost:8088 (admin/admin123)"
 echo "  - dbt:             Running in container"
+echo "  - dbt Docs:        http://localhost:8082/ (data lineage)"
 echo ""
 echo "Master Data:"
 echo "  - Customers:       $CUSTOMER_COUNT records"

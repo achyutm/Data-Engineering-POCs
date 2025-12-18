@@ -121,13 +121,13 @@ SHOW CATALOGS;
 SELECT * FROM kafka.default.telemetry_raw LIMIT 10;
 
 -- View staged data in Iceberg
-SELECT * FROM iceberg.staging.stg_telemetry_raw LIMIT 10;
+SELECT * FROM iceberg.energy_data_staging.stg_telemetry_raw LIMIT 10;
 
 -- View daily device metrics
-SELECT * FROM iceberg.marts.device_daily_metrics;
+SELECT * FROM iceberg.energy_data_marts.device_daily_metrics;
 
 -- View customer usage summary
-SELECT * FROM iceberg.marts.customer_usage_summary;
+SELECT * FROM iceberg.energy_data_marts.customer_usage_summary;
 
 -- Join with master data
 SELECT
@@ -138,7 +138,7 @@ SELECT
     t.energy_kwh,
     t.voltage,
     t.status
-FROM iceberg.staging.stg_telemetry_raw t
+FROM iceberg.energy_data_staging.stg_telemetry_raw t
 JOIN postgresql.public.device_master d ON t.device_id = d.device_id
 JOIN postgresql.public.customer_master c ON t.customer_id = c.customer_id
 LIMIT 10;

@@ -1,5 +1,13 @@
 version: '3.8'
 
+# Shared logging configuration
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+    labels: "service"
+
 services:
   kafka:
     image: confluentinc/cp-kafka:7.6.0
@@ -8,6 +16,7 @@ services:
     ports:
       - "19092:19092"
       - "9093:9093"
+    logging: *default-logging
     environment:
       # KRaft mode configuration
       KAFKA_NODE_ID: 1
@@ -59,6 +68,7 @@ services:
     container_name: kafka-ui
     ports:
       - "8080:8080"
+    logging: *default-logging
     environment:
       KAFKA_CLUSTERS_0_NAME: local-kraft
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
@@ -76,6 +86,7 @@ services:
     hostname: postgres
     ports:
       - "5432:5432"
+    logging: *default-logging
     environment:
       POSTGRES_USER: smartenergymeter
       POSTGRES_PASSWORD: smartenergymeter123
@@ -100,6 +111,7 @@ services:
     ports:
       - "9000:9000"
       - "9001:9001"
+    logging: *default-logging
     environment:
       MINIO_ROOT_USER: minio
       MINIO_ROOT_PASSWORD: minio123
@@ -119,6 +131,7 @@ services:
   minio-init:
     image: minio/mc:latest
     container_name: minio-init
+    logging: *default-logging
     depends_on:
       minio:
         condition: service_healthy
@@ -140,6 +153,7 @@ services:
     hostname: trino
     ports:
       - "8081:8080"
+    logging: *default-logging
     volumes:
       - ./trino-config/catalog:/etc/trino/catalog
       - ./trino-config/kafka-tables:/etc/trino/kafka-tables
@@ -164,6 +178,9 @@ services:
       dockerfile: Dockerfile
     container_name: dbt-transformations
     hostname: dbt
+    logging: *default-logging
+    ports:
+      - "8082:8080"
     volumes:
       - ./dbt-project:/dbt
     networks:
@@ -177,10 +194,91 @@ services:
       DBT_RUN_INTERVAL: "600"         # Run interval in seconds (default: 600 = 10 minutes)
     restart: unless-stopped
 
+  redis:
+    image: redis:7-alpine
+    container_name: superset-redis
+    hostname: redis
+    logging: *default-logging
+    networks:
+      - smartenergymeter-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  postgres-superset:
+    image: postgres:16
+    container_name: postgres-superset
+    hostname: postgres-superset
+    logging: *default-logging
+    environment:
+      POSTGRES_USER: superset
+      POSTGRES_PASSWORD: superset123
+      POSTGRES_DB: superset
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres-superset-data:/var/lib/postgresql/data
+    networks:
+      - smartenergymeter-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U superset -d superset"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  superset:
+    build:
+      context: ./superset
+      dockerfile: Dockerfile
+    container_name: superset
+    hostname: superset
+    ports:
+      - "8088:8088"
+    logging: *default-logging
+    environment:
+      SUPERSET_SECRET_KEY: "smartenergymeter-superset-secret-key-change-in-production"
+      DATABASE_DIALECT: postgresql
+      DATABASE_USER: superset
+      DATABASE_PASSWORD: superset123
+      DATABASE_HOST: postgres-superset
+      DATABASE_PORT: 5432
+      DATABASE_DB: superset
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    depends_on:
+      postgres-superset:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - smartenergymeter-network
+    restart: unless-stopped
+    user: root
+    command: >
+      /bin/bash -c "
+      superset db upgrade &&
+      superset fab create-admin --username admin --firstname Admin --lastname User --email admin@smartenergymeter.local --password admin123 || true &&
+      superset init &&
+      superset set_database_uri -d Trino -u 'trino://superset@trino:8080/iceberg' || true &&
+      /usr/bin/run-server.sh
+      "
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8088/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 90s
+
 volumes:
   kafka-data:
     driver: local
   postgres-data:
+    driver: local
+  postgres-superset-data:
     driver: local
   minio-data:
     driver: local
