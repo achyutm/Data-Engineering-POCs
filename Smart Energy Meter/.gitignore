@@ -1,3 +1,4 @@
 dbt-project/dbt_packages/
 dbt-project/logs
 dbt-project/target
+dbt-project/package-lock.yml
